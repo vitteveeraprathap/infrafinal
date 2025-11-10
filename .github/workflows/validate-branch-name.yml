@@ -1,0 +1,26 @@
+name: Validate branch name (feature/se-{JIRAID})
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches:
+      - develop
+      - main
+      - master
+
+jobs:
+  validate-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check branch name
+        run: |
+          BRANCH="${{ github.head_ref || github.ref_name }}"
+          echo "Branch detected: $BRANCH"
+          REGEX='^feature/se-[0-9]+$'
+          if [[ "$BRANCH" =~ $REGEX ]]; then
+            echo "Branch name valid"
+          else
+            echo "::error ::Branch name invalid. Must match: feature/se-1234"
+            exit 1
+          fi

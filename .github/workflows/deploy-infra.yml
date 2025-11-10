@@ -1,0 +1,121 @@
+name: Deploy Infra (subscription-level)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Which resource to deploy'
+        required: true
+        type: choice
+        options:
+          - all
+          - resource-group
+          - storage
+          - keyvault
+          - container
+        default: all
+      environment:
+        description: 'Environment (dev/uat/prod)'
+        required: true
+        type: choice
+        options:
+          - dev
+          - uat
+          - prod
+        default: dev
+      location:
+        description: 'Azure location (overrides param file if provided)'
+        required: false
+        default: ''
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      BICEP_MAIN: infra/main.bicep
+      PARAMS_FILE: infra/parameters/${{ github.event.inputs.environment }}.parameters.json
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Ensure Azure CLI & Bicep
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ca-certificates curl apt-transport-https lsb-release gnupg
+          curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+          az version
+          az bicep install || true
+          az bicep upgrade || true
+          az bicep version
+
+      - name: Resolve target flags
+        id: flags
+        run: |
+          tgt="${{ github.event.inputs.target }}"
+          case "$tgt" in
+            all)
+              echo "deployStorage=true" >> $GITHUB_OUTPUT
+              echo "deployKeyVault=true" >> $GITHUB_OUTPUT
+              echo "deployContainer=true" >> $GITHUB_OUTPUT
+              ;;
+            resource-group)
+              echo "deployStorage=false" >> $GITHUB_OUTPUT
+              echo "deployKeyVault=false" >> $GITHUB_OUTPUT
+              echo "deployContainer=false" >> $GITHUB_OUTPUT
+              ;;
+            storage)
+              echo "deployStorage=true" >> $GITHUB_OUTPUT
+              echo "deployKeyVault=false" >> $GITHUB_OUTPUT
+              echo "deployContainer=false" >> $GITHUB_OUTPUT
+              ;;
+            keyvault)
+              echo "deployStorage=false" >> $GITHUB_OUTPUT
+              echo "deployKeyVault=true" >> $GITHUB_OUTPUT
+              echo "deployContainer=false" >> $GITHUB_OUTPUT
+              ;;
+            container)
+              echo "deployStorage=false" >> $GITHUB_OUTPUT
+              echo "deployKeyVault=false" >> $GITHUB_OUTPUT
+              echo "deployContainer=true" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "Unknown target" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: What-if (preview changes)
+        run: |
+          LOCATION="${{ github.event.inputs.location }}"
+          if [ -z "$LOCATION" ]; then LOCATION="southeastasia"; fi
+
+          az deployment sub what-if \
+            --location "$LOCATION" \
+            --template-file "${{ env.BICEP_MAIN }}" \
+            --parameters @"${{ env.PARAMS_FILE }}" \
+            deployStorage=${{ steps.flags.outputs.deployStorage }} \
+            deployKeyVault=${{ steps.flags.outputs.deployKeyVault }} \
+            deployContainer=${{ steps.flags.outputs.deployContainer }} \
+            --query "properties.changeSummary" --output json
+
+      - name: Deploy (subscription-level)
+        run: |
+          LOCATION="${{ github.event.inputs.location }}"
+          if [ -z "$LOCATION" ]; then LOCATION="southeastasia"; fi
+          DEPLOY_NAME="sub-deploy-${{ github.run_id }}"
+
+          az deployment sub create \
+            --name "$DEPLOY_NAME" \
+            --location "$LOCATION" \
+            --template-file "${{ env.BICEP_MAIN }}" \
+            --parameters @"${{ env.PARAMS_FILE }}" \
+            deployStorage=${{ steps.flags.outputs.deployStorage }} \
+            deployKeyVault=${{ steps.flags.outputs.deployKeyVault }} \
+            deployContainer=${{ steps.flags.outputs.deployContainer }} \
+            --only-show-errors
