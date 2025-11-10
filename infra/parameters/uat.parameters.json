@@ -1,0 +1,19 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "southeastasia" },
+    "rgName": { "value": "rg-myapp-uat" },
+    "deployStorage": { "value": true },
+    "deployKeyVault": { "value": true },
+    "deployContainer": { "value": true },
+    "storageName": { "value": "mystoractuat091" },
+    "storageSku": { "value": "Standard_LRS" },
+    "storageKind": { "value": "StorageV2" },
+    "keyVaultName": { "value": "kvee-meeap-uat" },
+    "keyVaultSkuName": { "value": "standard" },
+    "enableSoftDelete": { "value": true },
+    "enablePurgeProtection": { "value": false },
+    "containerName": { "value": "appcontainer" }
+  }
+}

@@ -1,0 +1,22 @@
+name: Validate PR source to master
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches:
+      - master
+
+jobs:
+  validate-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate allowed source branches
+        run: |
+          HEAD="${{ github.head_ref }}"
+          echo "Source branch: $HEAD"
+          if [[ "$HEAD" =~ ^develop$ || "$HEAD" =~ ^release\/.+$ || "$HEAD" =~ ^hotfix\/.+$ ]]; then
+            echo "Allowed source branch: $HEAD"
+          else
+            echo "::error ::Only develop, release/*, or hotfix/* branches may merge into master."
+            exit 1
+          fi
